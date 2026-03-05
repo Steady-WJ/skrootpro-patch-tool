@@ -1,0 +1,13 @@
+# 编译产物
+*.o
+*.d
+patch_kernel_sk
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
