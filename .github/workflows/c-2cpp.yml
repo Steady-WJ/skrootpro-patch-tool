@@ -1,0 +1,19 @@
+build-arm64-cross:
+  runs-on: ubuntu-22.04
+  steps:
+    - uses: actions/checkout@v4
+    - name: Install cross-compiler
+      run: sudo apt-get install -y g++-aarch64-linux-gnu
+    - name: Fix Makefile
+      run: |
+        sed -i 's/^CXX := g++/CXX := aarch64-linux-gnu-g++/' Makefile
+        sed -i 's/^CC  := gcc/CC  := aarch64-linux-gnu-gcc/' Makefile
+    - name: Build
+      run: |
+        make clean
+        make -j$(nproc)
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: patch_kernel_sk-arm64
+        path: patch_kernel_sk
