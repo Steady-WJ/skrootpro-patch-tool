@@ -1,0 +1,105 @@
+name: SKRoot Pro Auto Build
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  # 原生 x86_64 编译（用于在 PC Linux 上使用）
+  build-native:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential g++-11 make
+
+      - name: Build native (x86_64)
+        run: |
+          make clean
+          make -j$(nproc) CXX=g++-11 CC=gcc-11
+
+      - name: Upload x86_64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: patch_kernel_sk-x86_64
+          path: patch_kernel_sk
+          retention-days: 30
+
+  # ARM64 交叉编译（用于 Android 设备）
+  build-arm64:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ARM64 cross-compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
+
+      - name: Fix Makefile for cross-compile
+        run: |
+          # 备份原 Makefile
+          cp Makefile Makefile.bak
+          # 替换硬编码的编译器
+          sed -i 's/^CXX := g++/CXX := aarch64-linux-gnu-g++/' Makefile
+          sed -i 's/^CC  := gcc/CC  := aarch64-linux-gnu-gcc/' Makefile
+
+      - name: Build for ARM64
+        run: |
+          make clean
+          make -j$(nproc)
+
+      - name: Restore Makefile
+        run: mv Makefile.bak Makefile
+
+      - name: Verify ARM64 binary
+        run: |
+          file patch_kernel_sk
+          ldd patch_kernel_sk || echo "Static or cross-compiled binary"
+
+      - name: Upload ARM64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: patch_kernel_sk-arm64
+          path: patch_kernel_sk
+          retention-days: 30
+
+  # 可选：使用 QEMU 模拟 ARM64 原生编译（最可靠）
+  build-arm64-qemu:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build in ARM64 container
+        uses: docker://arm64v8/ubuntu:22.04
+        with:
+          args: >
+            bash -c "
+              apt-get update &&
+              apt-get install -y build-essential make g++-11 &&
+              cd /github/workspace &&
+              make clean &&
+              make -j\$(nproc) CXX=g++-11 CC=gcc-11
+            "
+
+      - name: Upload ARM64 (QEMU) artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: patch_kernel_sk-arm64-qemu
+          path: patch_kernel_sk
+          retention-days: 30
